@@ -11,8 +11,9 @@
 #include <iomanip>
 #include <iostream>
 #include <random>
-#include <thread>
+// #include <thread>
 #include <vector>
+
 #include "config.h"
 
 // Check configuration.
@@ -997,16 +998,17 @@ static_assert( check_shim_against_blueprint< SHIM_16, BLUEPRINT_16 > );
 #endif
 
 // Random number generator.
-std::default_random_engine random_number_generator( std::chrono::steady_clock::now().time_since_epoch().count() );
+std::mt19937_64::result_type seed0 = 1584621889u; // arbitrary, for repeatability
+std::mt19937_64 random_number_generator( seed0 );
 
 // Function for providing unique keys for a given blueprint in random order.
 // Besides the KEY_COUNT keys to be inserted, it also provides an extra KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL *
-// 1000 keys for testing failed look-ups.
+// OP_COUNT keys for testing failed look-ups.
 template< typename blueprint > const blueprint::key_type &shuffled_unique_key( size_t index )
 {
   static auto keys = []()
   {
-    std::vector<typename blueprint::key_type> keys( KEY_COUNT + KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL * 1000 );
+    std::vector<typename blueprint::key_type> keys( KEY_COUNT + (KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL) * OP_COUNT );
     blueprint::fill_unique_keys( keys );
     std::shuffle( keys.begin(), keys.end(), random_number_generator );
     return keys;
@@ -1019,6 +1021,7 @@ template< typename blueprint > const blueprint::key_type &shuffled_unique_key( s
 enum benchmark_ids
 {
   insert_nonexisting,
+  reinsert_nonexisting,
   erase_existing,
   insert_existing,
   erase_nonexisting,
@@ -1028,19 +1031,21 @@ enum benchmark_ids
 };
 
 // Benchmark names used in the graphs.
-const char *benchmark_names[] = {
+const std::string benchmark_names[] = {
   "Total time to insert N nonexisting keys",
-  "Time to erase 1,000 existing keys with N keys in the table",
-  "Time to replace 1,000 existing keys with N keys in the table",
-  "Time to erase 1,000 nonexisting keys with N keys in the table",
-  "Time to look up 1,000 existing keys with N keys in the table",
-  "Time to look up 1,000 nonexisting keys with N keys in the table",
-  "Time to iterate over 5,000 keys with N keys in the table"
+  "Total time to re-insert N nonexisting keys after erasing all",
+  "Time to erase " + std::to_string(OP_COUNT) + " existing keys with N keys in the table",
+  "Time to replace " + std::to_string(OP_COUNT) + " existing keys with N keys in the table",
+  "Time to erase " + std::to_string(OP_COUNT) + " nonexisting keys with N keys in the table",
+  "Time to look up " + std::to_string(OP_COUNT) + " existing keys with N keys in the table",
+  "Time to look up " + std::to_string(OP_COUNT) + " nonexisting keys with N keys in the table",
+  "Time to iterate over " + std::to_string(ITER_COUNT) + " keys with N keys in the table"
 };
 
 // Benchmark names used in the heatmap.
 const char *benchmark_alt_names[] = {
   "Insert nonexisting",
+  "Re-insert nonexisting",
   "Erase existing",
   "Replace existing",
   "Erase nonexisting",
@@ -1065,13 +1070,16 @@ void flush_cache()
   static auto buffer = std::vector< uint64_t >( APPROXIMATE_CACHE_SIZE / sizeof( uint64_t ) + 1 );
 
   for( auto itr = buffer.begin(); itr != buffer.end(); ++itr )
-    do_not_optimize += *itr;
+    do_not_optimize += ++(*itr);
 }
  
 // Actual benchmarking function.
-template< template< typename > typename shim, typename blueprint >void benchmark( unsigned int run )
+template< template< typename > typename shim, typename blueprint >
+void benchmark( unsigned int run )
 {
   std::cout << shim<void>::label << ": " << blueprint::label << "\n";
+  
+  random_number_generator.seed(seed0 + (run * 0x1BC61)); // arbitrary, for repeatability
 
   // Ugly workaround to ensure that the static unique keys and results arrays inside their respective template functions
   // are initialized outside of the timed code below.
@@ -1079,13 +1087,14 @@ template< template< typename > typename shim, typename blueprint >void benchmark
   // initialized at program start-up.
   do_not_optimize += *(unsigned char *)&shuffled_unique_key< blueprint >( 0 );
   do_not_optimize += *(unsigned char *)&results< shim, blueprint, insert_nonexisting >( 0, 0 );
+  do_not_optimize += *(unsigned char *)&results< shim, blueprint, reinsert_nonexisting >( 0, 0 );
   do_not_optimize += *(unsigned char *)&results< shim, blueprint, erase_existing >( 0, 0 );
   do_not_optimize += *(unsigned char *)&results< shim, blueprint, insert_existing >( 0, 0 );
   do_not_optimize += *(unsigned char *)&results< shim, blueprint, erase_nonexisting >( 0, 0 );
   do_not_optimize += *(unsigned char *)&results< shim, blueprint, get_existing >( 0, 0 );
   do_not_optimize += *(unsigned char *)&results< shim, blueprint, get_nonexisting >( 0, 0 );
   do_not_optimize += *(unsigned char *)&results< shim, blueprint, iteration >( 0, 0 );
-
+  
   // Reset the cache state.
   // This ensures that each table starts each benchmarking run on equal footing, but it does not prevent the cache
   // effects of one benchmark from potentially influencing latter benchmarks.
@@ -1095,7 +1104,7 @@ template< template< typename > typename shim, typename blueprint >void benchmark
   {
     auto table = shim< blueprint >::create_table();
 
-    std::this_thread::sleep_for( std::chrono::milliseconds( MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS ) );
+    // std::this_thread::sleep_for( std::chrono::milliseconds( MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS ) );
 
     size_t i = 0;
     size_t j = 0;
@@ -1107,11 +1116,9 @@ template< template< typename > typename shim, typename blueprint >void benchmark
       ++i;
       if( ++j == KEY_COUNT_MEASUREMENT_INTERVAL )
       {
+        auto end = std::chrono::high_resolution_clock::now();
         results< shim, blueprint, insert_nonexisting >( run, i / KEY_COUNT_MEASUREMENT_INTERVAL - 1 ) =
-          std::chrono::duration_cast< std::chrono::microseconds >(
-            std::chrono::high_resolution_clock::now() - start
-          ).count();
-
+            std::chrono::duration_cast< std::chrono::microseconds >(end - start).count();
         j = 0;
       }
     }
@@ -1124,23 +1131,25 @@ template< template< typename > typename shim, typename blueprint >void benchmark
   {
     auto table = shim< blueprint >::create_table();
 
-    std::this_thread::sleep_for( std::chrono::milliseconds( MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS ) );
+    // std::this_thread::sleep_for( std::chrono::milliseconds( MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS ) );
 
     size_t i = 0;
     size_t j = 0;
-    while( i < KEY_COUNT )
+    while (i < KEY_COUNT)
     {
       shim< blueprint >::insert( table, shuffled_unique_key< blueprint >( i ) );
 
       ++i;
-      if( ++j == KEY_COUNT_MEASUREMENT_INTERVAL )
+      if (++j == KEY_COUNT_MEASUREMENT_INTERVAL)
       {
+        flush_cache(); // avoid previous ops impacting data hotness in cache
+        
         size_t result_index = i / KEY_COUNT_MEASUREMENT_INTERVAL - 1;
 
         // To determine which keys to erase, we randomly chose a position in the sequence of keys already inserted and
-        // then erase the subsequent 1000 keys, wrapping around to the start of the sequence if necessary.
+        // then erase the subsequent OP_COUNT keys, wrapping around to the start of the sequence if necessary.
         // This strategy has the potential drawback that keys are erased in the same order in which they were inserted.
-        size_t erase_keys_begin = std::uniform_int_distribution<size_t>( 0, i - 1 )( random_number_generator );
+        size_t erase_keys_begin = random_number_generator() % i;
 
         size_t k = 0;
         size_t l = erase_keys_begin;
@@ -1150,7 +1159,7 @@ template< template< typename > typename shim, typename blueprint >void benchmark
         {
           shim< blueprint >::erase( table, shuffled_unique_key< blueprint >( l ) );
 
-          if( ++k == 1000 )
+          if( ++k == OP_COUNT )
             break;
           if( ++l == i )
             l = 0;
@@ -1171,7 +1180,7 @@ template< template< typename > typename shim, typename blueprint >void benchmark
         {
           shim< blueprint >::insert( table, shuffled_unique_key< blueprint >( l ) );
   
-          if( ++k == 1000 )
+          if( ++k == OP_COUNT )
             break;
           if( ++l == i )
             l = 0;
@@ -1190,11 +1199,12 @@ template< template< typename > typename shim, typename blueprint >void benchmark
     defined( BENCHMARK_ERASE_NONEXISTING ) || \
     defined( BENCHMARK_GET_EXISTING )      || \
     defined( BENCHMARK_GET_NONEXISTING )   || \
-    defined( BENCHMARK_ITERATION )
+    defined( BENCHMARK_ITERATION )         || \
+    defined( BENCHMARK_REINSERT_NONEXISTING )
   {
     auto table = shim< blueprint >::create_table();
 
-    std::this_thread::sleep_for( std::chrono::milliseconds( MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS ) );
+    // std::this_thread::sleep_for( std::chrono::milliseconds( MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS ) );
 
     size_t i = 0;
     size_t j = 0;
@@ -1205,6 +1215,8 @@ template< template< typename > typename shim, typename blueprint >void benchmark
       ++i;
       if( ++j == KEY_COUNT_MEASUREMENT_INTERVAL )
       {
+        flush_cache(); // avoid previous ops impacting data hotness in cache
+        
         size_t result_index = i / KEY_COUNT_MEASUREMENT_INTERVAL - 1;
 
         #ifdef BENCHMARK_INSERT_EXISTING
@@ -1213,14 +1225,14 @@ template< template< typename > typename shim, typename blueprint >void benchmark
 
           // To determine which existing keys to replace, we apply the same strategy that we applied when erasing
           // existing keys.
-          size_t l = std::uniform_int_distribution<size_t>( 0, i - 1 )( random_number_generator );
+          size_t l = random_number_generator() % i;
 
           auto start = std::chrono::high_resolution_clock::now();
           while( true )
           {
             shim< blueprint >::insert( table, shuffled_unique_key< blueprint >( l ) );
 
-            if( ++k == 1000 )
+            if( ++k == OP_COUNT )
               break;
             if( ++l == i )
               l = 0;
@@ -1238,21 +1250,18 @@ template< template< typename > typename shim, typename blueprint >void benchmark
           size_t k = 0;
 
           // To determine which nonexisting keys to attempt to erase, we randomly chose a position in the sequence of
-          // nonexisting keys (which starts at KEY_COUNT) and then call erase for the subsequent 1000 keys, wrapping
+          // nonexisting keys (which starts at KEY_COUNT) and then call erase for the subsequent OP_COUNT keys, wrapping
           // around to the start of the sequence if necessary.
-          size_t l = std::uniform_int_distribution<size_t>(
-            KEY_COUNT,
-            KEY_COUNT + KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL * 1000 - 1
-          )( random_number_generator );
+          size_t l = random_number_generator() % (((KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL) * OP_COUNT) + KEY_COUNT);
 
           auto start = std::chrono::high_resolution_clock::now();
-          while( true )
+          while (true)
           {
             shim< blueprint >::erase( table, shuffled_unique_key< blueprint >( l ) );
 
-            if( ++k == 1000 )
+            if (++k == OP_COUNT)
               break;
-            if( ++l == KEY_COUNT + KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL * 1000 )
+            if (++l == KEY_COUNT + (KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL) * OP_COUNT)
               l = KEY_COUNT;
           }
 
@@ -1269,7 +1278,7 @@ template< template< typename > typename shim, typename blueprint >void benchmark
 
           // To determine which existing keys to look-up, we apply the same strategy that we applied when erasing
           // and inserting existing keys.
-          size_t l = std::uniform_int_distribution<size_t>( 0, i - 1 )( random_number_generator );
+          size_t l = random_number_generator() % i;
 
           auto start = std::chrono::high_resolution_clock::now();
           while( true )
@@ -1284,7 +1293,7 @@ template< template< typename > typename shim, typename blueprint >void benchmark
             if( shim< blueprint >::get_key_from_itr( table, itr ) != shuffled_unique_key< blueprint >( l ) )
               exit( 0 );
 
-            if( ++k == 1000 )
+            if( ++k == OP_COUNT )
               break;
             if( ++l == i )
               l = 0;
@@ -1303,10 +1312,7 @@ template< template< typename > typename shim, typename blueprint >void benchmark
 
           // To determine which nonexisting keys to attempt to look-up, we apply the same strategy that we applied when
           // erasing nonexisting keys.
-          size_t l = std::uniform_int_distribution<size_t>(
-            KEY_COUNT,
-            KEY_COUNT + KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL * 1000 - 1
-          )( random_number_generator );
+          size_t l = random_number_generator() % (((KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL) * OP_COUNT) + KEY_COUNT);
 
           auto start = std::chrono::high_resolution_clock::now();
           while( true )
@@ -1314,9 +1320,9 @@ template< template< typename > typename shim, typename blueprint >void benchmark
             auto itr = shim< blueprint >::find( table, shuffled_unique_key< blueprint >( l ) );
             do_not_optimize += shim< blueprint >::is_itr_valid( table, itr ); // Should always be false.
 
-            if( ++k == 1000 )
+            if( ++k == OP_COUNT )
               break;
-            if( ++l == KEY_COUNT + KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL * 1000 )
+            if( ++l == KEY_COUNT + (KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL) * OP_COUNT )
               l = KEY_COUNT;
           }
 
@@ -1334,7 +1340,7 @@ template< template< typename > typename shim, typename blueprint >void benchmark
           auto itr = shim< blueprint >::find(
             table,
             shuffled_unique_key< blueprint >(
-              std::uniform_int_distribution<size_t>( 0, i - 1 )( random_number_generator )
+              random_number_generator() % i
             )
           );
 
@@ -1348,7 +1354,7 @@ template< template< typename > typename shim, typename blueprint >void benchmark
             do_not_optimize += *(unsigned char *)&shim< blueprint >::get_key_from_itr( table, itr );
             do_not_optimize += *(unsigned char *)&shim< blueprint >::get_value_from_itr( table, itr );
 
-            if( ++k == 1000 )
+            if( ++k == ITER_COUNT )
               break;
 
             shim< blueprint >::increment_itr( table, itr );
@@ -1365,7 +1371,33 @@ template< template< typename > typename shim, typename blueprint >void benchmark
 
         j = 0;
       }
-    }   
+    }
+
+  #ifdef BENCHMARK_REINSERT_NONEXISTING
+    shim< blueprint >::eraseN(table, table.size() - 1u);
+    assert(table.size() == 1u);
+    
+    flush_cache(); // avoid previous insert impacting data hotness in cache
+    
+    {
+      i = 0;
+      j = 0;
+      auto start = std::chrono::high_resolution_clock::now();
+      while (i < KEY_COUNT)
+      {
+        shim< blueprint >::insert( table, shuffled_unique_key< blueprint >( i ) );
+        
+        ++i;
+        if (++j == KEY_COUNT_MEASUREMENT_INTERVAL)
+        {
+          results< shim, blueprint, reinsert_nonexisting >( run, i / KEY_COUNT_MEASUREMENT_INTERVAL - 1 ) =
+              std::chrono::duration_cast< std::chrono::microseconds >(
+                  std::chrono::high_resolution_clock::now() - start).count();
+          j = 0;
+        }
+      }
+    }
+  #endif // BENCHMARK_REINSERT_NONEXISTING
 
     shim< blueprint >::destroy_table( table );
   }
@@ -1439,15 +1471,14 @@ double adjusted_average_result( size_t result_index )
   std::sort(
     results_temp.begin(),
     results_temp.end(),
-    []( uint64_t &left, uint64_t &right )
-    {
+    []( uint64_t left, uint64_t right ) {
       return left < right;
     }
   );
 
   return (double)std::accumulate(
-    results_temp.begin() + DISCARDED_RUNS_COUNT / 2,
-    results_temp.end() - DISCARDED_RUNS_COUNT / 2,
+      results_temp.begin() + DISCARDED_RUNS_COUNT / 2,
+      results_temp.end()   - DISCARDED_RUNS_COUNT / 2,
     (uint64_t)0
   ) / ( results_temp.size() - DISCARDED_RUNS_COUNT );
 }
@@ -1805,13 +1836,12 @@ template< typename blueprint, benchmark_ids benchmark_id > void graph_out( std::
   std::sort(
     max_results.begin(),
     max_results.end(),
-    []( std::pair< size_t, double > &left, std::pair< size_t, double > &right )
-    {
+    []( const std::pair< size_t, double > &left, const std::pair< size_t, double > &right ) {
       return left.second < right.second;
     }
   );
 
-  for( auto &max_result: max_results )
+  for( const auto &max_result : max_results )
   {
     file <<
       "  \n"
@@ -2044,7 +2074,7 @@ double total_adjusted_average_result()
   // Since the INSERT_NOEXISTING benchmark is already cumulative, there's no need to total the results for each
   // measurement taken in the benchmark.
   // Instead, we just use the final measurement.
-  if( benchmark_id == insert_nonexisting )
+  if (benchmark_id == insert_nonexisting || benchmark_id == reinsert_nonexisting)
     return adjusted_average_result< shim, blueprint, benchmark_id >( KEY_COUNT / KEY_COUNT_MEASUREMENT_INTERVAL - 1 );
 
   // Otherwise, sum all displayed data points.
@@ -2353,6 +2383,9 @@ void heatmap_out( std::ofstream &file )
   #ifdef BENCHMARK_INSERT_NONEXISTING
   ++benchmarks;
   #endif
+  #ifdef BENCHMARK_REINSERT_NONEXISTING
+  ++benchmarks;
+  #endif
   #ifdef BENCHMARK_ERASE_EXISTING
   ++benchmarks;
   #endif
@@ -2499,6 +2532,9 @@ void heatmap_out( std::ofstream &file )
   #ifdef BENCHMARK_INSERT_NONEXISTING
   heatmap_rows_out< insert_nonexisting >( file, row, cell_width );
   #endif
+  #ifdef BENCHMARK_REINSERT_NONEXISTING
+  heatmap_rows_out< reinsert_nonexisting >( file, row, cell_width );
+  #endif
   #ifdef BENCHMARK_ERASE_EXISTING
   heatmap_rows_out< erase_existing >( file, row, cell_width );
   #endif
@@ -2545,16 +2581,19 @@ void html_out( std::string &file_id )
        << "KEY_COUNT: " << KEY_COUNT << "<br>\n"
        << "KEY_COUNT_MEASUREMENT_INTERVAL: " << KEY_COUNT_MEASUREMENT_INTERVAL << "<br>\n"
        << "RUN_COUNT: " << RUN_COUNT << "<br>\n"
-       << "DISCARDED_RUNS_COUNT: " << DISCARDED_RUNS_COUNT << "<br>\n"
+       << "DISCARDED_RUNS_COUNT: " << (int)(DISCARDED_RUNS_COUNT) << "<br>\n"
        << "MAX_LOAD_FACTOR: " << MAX_LOAD_FACTOR << "<br>\n"
        << "APPROXIMATE_CACHE_SIZE: " << APPROXIMATE_CACHE_SIZE << "<br>\n"
-       << "MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS: " << MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS << '\n'
+       // << "MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS: " << MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS << '\n'
        << "</div>\n"
        << "</div>\n"
   ;
 
   #ifdef BENCHMARK_INSERT_NONEXISTING
   graphs_out< insert_nonexisting >( file );
+  #endif
+  #ifdef BENCHMARK_REINSERT_NONEXISTING
+  graphs_out< reinsert_nonexisting >( file );
   #endif
   #ifdef BENCHMARK_ERASE_EXISTING
   graphs_out< erase_existing >( file );
@@ -2723,6 +2762,9 @@ void csv_out( std::string &file_id )
   #ifdef BENCHMARK_INSERT_NONEXISTING
   csv_benchmark_out< insert_nonexisting >( file );
   #endif
+  #ifdef BENCHMARK_REINSERT_NONEXISTING
+  csv_benchmark_out< reinsert_nonexisting >( file );
+  #endif
   #ifdef BENCHMARK_ERASE_EXISTING
   csv_benchmark_out< erase_existing >( file );
   #endif
@@ -2747,6 +2789,12 @@ void csv_out( std::string &file_id )
 
 int main()
 {
+  // Warm-up (arbitrary computation for a few seconds)
+  std::cout << "Warm-up start..." << std::endl;
+  for (int i = 0; i < 100000000; ++i)
+    do_not_optimize += std::pow(i, 5) * std::atan2(i, i/2 + 1) * std::atan2(i/2 + 1, i);
+  std::cout << "Warm-up end" << std::endl;
+  
   for( unsigned int run = 0; run < RUN_COUNT; ++run )
   {
     std::cout << "Run " << run << '\n';

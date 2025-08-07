@@ -2,6 +2,9 @@
 // Copyright (c) 2024 Jackson L. Allan.
 // Distributed under the MIT License (see the accompanying LICENSE file).
 
+#include <vector>
+
+#include <cstdint>
 #include <cstring>
 
 #define CSTRING_UINT64_FNV1A_ENABLED

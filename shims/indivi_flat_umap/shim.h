@@ -1,19 +1,12 @@
-// c_cpp_hash_tables_benchmark/shims/absl_flat_hash_map/shim.h
+// c_cpp_hash_tables_benchmark/shims/boost_unordered_flat_map/shim.h
 // Copyright (c) 2024 Jackson L. Allan.
 // Distributed under the MIT License (see the accompanying LICENSE file).
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-#pragma GCC diagnostic ignored "-Woverflow"
-#include "absl/container/internal/raw_hash_set.cc"
-#include "absl/base/internal/raw_logging.cc"
-#include "absl/hash/internal/hash.cc"
-#include "absl/hash/internal/city.cc"
-#include "absl/hash/internal/low_level_hash.cc"
-#include "absl/container/flat_hash_map.h"
-#pragma GCC diagnostic pop
+#undef MAX_LOAD_FACTOR
+#include "indivi/flat_umap.h"
+#define MAX_LOAD_FACTOR 0.875
 
-template< typename blueprint > struct absl_flat_hash_map
+template< typename blueprint > struct indivi_flat_umap
 {
   struct hash
   {
@@ -33,18 +26,18 @@ template< typename blueprint > struct absl_flat_hash_map
     }
   };
 
-  using table_type = absl::flat_hash_map<
+  using table_type = indivi::flat_umap<
     typename blueprint::key_type,
     typename blueprint::value_type,
     hash,
-    // absl::container_internal::hash_default_hash<typename blueprint::key_type>,
+    // indivi::hash<typename blueprint::key_type>,
     cmpr
   >;
 
   static table_type create_table()
   {
     table_type table;
-    table.max_load_factor( MAX_LOAD_FACTOR );
+    // table.max_load_factor( MAX_LOAD_FACTOR );
     return table;
   }
 
@@ -74,6 +67,10 @@ template< typename blueprint > struct absl_flat_hash_map
   {
     return table.begin();
   }
+  static table_type::iterator end_itr( table_type &table )
+  {
+    return table.end();
+  }
 
   static bool is_itr_valid( table_type &table, table_type::iterator &itr )
   {
@@ -101,9 +98,9 @@ template< typename blueprint > struct absl_flat_hash_map
   }
 };
 
-template<> struct absl_flat_hash_map< void >
+template<> struct indivi_flat_umap< void >
 {
-  static constexpr const char *label = "absl";
-  static constexpr const char *color = "rgb( 81, 169, 240 )";
-  static constexpr bool tombstone_like_mechanism = true;
+  static constexpr const char *label = "flat_umap";
+  static constexpr const char *color = "rgb( 201, 159, 108 )";
+  static constexpr bool tombstone_like_mechanism = false;
 };

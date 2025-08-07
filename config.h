@@ -9,6 +9,10 @@
 // This must be a factor of KEY_COUNT.
 #define KEY_COUNT_MEASUREMENT_INTERVAL 500
 
+// The number of benchmarked operations/iterations
+#define OP_COUNT 500
+#define ITER_COUNT 5000
+
 // The number of times to repeat the benchmarks.
 #define RUN_COUNT 14
 
@@ -28,16 +32,17 @@
 // caches.
 // This mechanism is intended to ensure that each map starts the benchmarks under approximately the same condition with
 // regard to whether the keys are cached.
-#define APPROXIMATE_CACHE_SIZE 20000000
+#define APPROXIMATE_CACHE_SIZE 25000000
 
 // The amount of time to sleep between benchmarks.
-#define MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS 1000
+// #define MILLISECOND_COOLDOWN_BETWEEN_BENCHMARKS 1000
 
 // The specific benchmarks to run (comment them out to disable them).
 #define BENCHMARK_INSERT_NONEXISTING
+// #define BENCHMARK_REINSERT_NONEXISTING
 #define BENCHMARK_ERASE_EXISTING
 #define BENCHMARK_INSERT_EXISTING
-#define BENCHMARK_ERASE_NONEXISTING
+// #define BENCHMARK_ERASE_NONEXISTING
 #define BENCHMARK_GET_EXISTING
 #define BENCHMARK_GET_NONEXISTING
 #define BENCHMARK_ITERATION
@@ -46,6 +51,7 @@
 #define BLUEPRINT_1 uint32_uint32_murmur
 #define BLUEPRINT_2 uint64_struct448_murmur
 #define BLUEPRINT_3 cstring_uint64_fnv1a
+// #define BLUEPRINT_3 stdstring_uint64_fnv1a
 // #define BLUEPRINT_4
 // #define BLUEPRINT_5
 // #define BLUEPRINT_6

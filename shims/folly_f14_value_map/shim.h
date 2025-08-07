@@ -1,19 +1,22 @@
-// c_cpp_hash_tables_benchmark/shims/absl_flat_hash_map/shim.h
+// c_cpp_hash_tables_benchmark/shims/boost_unordered_flat_map/shim.h
 // Copyright (c) 2024 Jackson L. Allan.
 // Distributed under the MIT License (see the accompanying LICENSE file).
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 #pragma GCC diagnostic ignored "-Woverflow"
-#include "absl/container/internal/raw_hash_set.cc"
-#include "absl/base/internal/raw_logging.cc"
-#include "absl/hash/internal/hash.cc"
-#include "absl/hash/internal/city.cc"
-#include "absl/hash/internal/low_level_hash.cc"
-#include "absl/container/flat_hash_map.h"
+// #include "absl/container/internal/raw_hash_set.cc"
+// #include "absl/base/internal/raw_logging.cc"
+// #include "absl/hash/internal/hash.cc"
+// #include "absl/hash/internal/city.cc"
+// #include "absl/hash/internal/low_level_hash.cc"
+// #include "absl/container/flat_hash_map.h"
+#include "folly/container/F14Map.h"
 #pragma GCC diagnostic pop
 
-template< typename blueprint > struct absl_flat_hash_map
+#include <cstddef>
+
+template< typename blueprint > struct folly_f14_value_map
 {
   struct hash
   {
@@ -33,11 +36,11 @@ template< typename blueprint > struct absl_flat_hash_map
     }
   };
 
-  using table_type = absl::flat_hash_map<
+  using table_type = folly::F14ValueMap<
     typename blueprint::key_type,
     typename blueprint::value_type,
     hash,
-    // absl::container_internal::hash_default_hash<typename blueprint::key_type>,
+    // folly::f14::DefaultHasher<typename blueprint::key_type>,
     cmpr
   >;
 
@@ -67,7 +70,7 @@ template< typename blueprint > struct absl_flat_hash_map
   {
     auto it = table.begin();
     for (std::size_t i = 0u; i < n; ++i)
-      table.erase(it++);
+      it = table.erase(it);
   }
 
   static table_type::iterator begin_itr( table_type &table )
@@ -101,9 +104,9 @@ template< typename blueprint > struct absl_flat_hash_map
   }
 };
 
-template<> struct absl_flat_hash_map< void >
+template<> struct folly_f14_value_map< void >
 {
-  static constexpr const char *label = "absl";
-  static constexpr const char *color = "rgb( 81, 169, 240 )";
-  static constexpr bool tombstone_like_mechanism = true;
+  static constexpr const char *label = "folly";
+  static constexpr const char *color = "rgb( 61, 79, 210 )";
+  static constexpr bool tombstone_like_mechanism = false;
 };

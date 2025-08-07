@@ -28,6 +28,7 @@ template< typename blueprint > struct ankerl_unordered_dense
     typename blueprint::key_type,
     typename blueprint::value_type,
     hash,
+    // ankerl::unordered_dense::hash<typename blueprint::key_type>,
     cmpr
   >;
 
@@ -52,6 +53,13 @@ template< typename blueprint > struct ankerl_unordered_dense
   {
     table.erase( key );
   }
+  
+  static void eraseN( table_type &table, std::size_t n )
+  {
+    auto it = table.begin();
+    for (std::size_t i = 0u; i < n; ++i)
+      it = table.erase(it);
+  }
 
   static table_type::iterator begin_itr( table_type &table )
   {
@@ -63,22 +71,22 @@ template< typename blueprint > struct ankerl_unordered_dense
     return itr != table.end();
   }
 
-  static void increment_itr( table_type &table, table_type::iterator &itr )
+  static void increment_itr( table_type &, table_type::iterator &itr )
   {
     ++itr;
   }
 
-  static const blueprint::key_type &get_key_from_itr( table_type &table, table_type::iterator &itr )
+  static const blueprint::key_type &get_key_from_itr( table_type &, table_type::iterator &itr )
   {
     return itr->first;
   }
 
-  static const blueprint::value_type &get_value_from_itr( table_type &table, table_type::iterator &itr )
+  static const blueprint::value_type &get_value_from_itr( table_type &, table_type::iterator &itr )
   {
     return itr->second;
   }
 
-  static void destroy_table( table_type &table )
+  static void destroy_table( table_type & )
   {
     // RAII handles destruction.
   }

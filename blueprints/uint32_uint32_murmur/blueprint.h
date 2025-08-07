@@ -2,7 +2,13 @@
 // Copyright (c) 2024 Jackson L. Allan.
 // Distributed under the MIT License (see the accompanying LICENSE file).
 
-#include <numeric>
+// #include <numeric>
+#include <random>
+#include <unordered_set>
+#include <vector>
+
+#include <cassert>
+#include <cstdint>
 
 #define UINT32_UINT32_MURMUR_ENABLED
 
@@ -31,6 +37,19 @@ struct uint32_uint32_murmur
 
   static void fill_unique_keys( std::vector<key_type> &keys )
   {
-    std::iota( keys.begin(), keys.end(), 0 );
+    // sequence keys
+    // std::iota( keys.begin(), keys.end(), 0 );
+    
+    // random keys
+    std::mt19937 mt(0);
+    std::uniform_int_distribution<int> dist(0, INT_MAX/2);
+    std::unordered_set<key_type> set;
+    while (set.size() != keys.size())
+      set.insert(dist(mt));
+    
+    auto it = set.begin();
+    for (auto& k : keys)
+      k = *it++;
+    assert(it == set.end());
   }
 };

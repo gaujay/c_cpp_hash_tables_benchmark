@@ -1,3 +1,13 @@
+## Fork note
+
+This repository is a fork of Jackson Allan excellent [benchmarking suite](https://github.com/JacksonAllan/c_cpp_hash_tables_benchmark).
+
+Notable changes are:
+* Improve cross-platform repeatability and add 're-insert nonexisting' benchmark (to showcase tombstones effect)
+* Use random integer keys (instead of sequence) and add blueprint for long std-string data type
+* Add/update some shims for others libs
+* Add basic CMake support
+
 ## Introduction
 
 This repository contains a comparative, extendible benchmarking suite for C and C++ hash-table libraries.
