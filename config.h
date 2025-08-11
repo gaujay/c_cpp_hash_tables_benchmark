@@ -39,7 +39,7 @@
 
 // The specific benchmarks to run (comment them out to disable them).
 #define BENCHMARK_INSERT_NONEXISTING
-// #define BENCHMARK_REINSERT_NONEXISTING
+#define BENCHMARK_REINSERT_NONEXISTING
 #define BENCHMARK_ERASE_EXISTING
 #define BENCHMARK_INSERT_EXISTING
 // #define BENCHMARK_ERASE_NONEXISTING
@@ -51,7 +51,7 @@
 #define BLUEPRINT_1 uint32_uint32_murmur
 #define BLUEPRINT_2 uint64_struct448_murmur
 #define BLUEPRINT_3 cstring_uint64_fnv1a
-// #define BLUEPRINT_3 stdstring_uint64_fnv1a
+// #define BLUEPRINT_3 stdstring_uint64_fnv1a // C++ only
 // #define BLUEPRINT_4
 // #define BLUEPRINT_5
 // #define BLUEPRINT_6

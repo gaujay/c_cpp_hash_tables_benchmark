@@ -1374,8 +1374,17 @@ void benchmark( unsigned int run )
     }
 
   #ifdef BENCHMARK_REINSERT_NONEXISTING
-    shim< blueprint >::eraseN(table, table.size() - 1u);
-    assert(table.size() == 1u);
+    // erase all but one element (avoid potential full clear mechanism)
+    for (i = 0; i < KEY_COUNT - 1; ++i)
+      shim< blueprint >::erase(table, shuffled_unique_key< blueprint >( i ));
+
+  #ifndef NDEBUG
+    // check size == 1
+    auto iter = shim< blueprint >::begin_itr( table );
+    assert(shim< blueprint >::is_itr_valid(table, iter));
+    shim< blueprint >::increment_itr(table, iter);
+    assert(!shim< blueprint >::is_itr_valid(table, iter));
+  #endif
     
     flush_cache(); // avoid previous insert impacting data hotness in cache
     

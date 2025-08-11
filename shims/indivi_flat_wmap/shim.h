@@ -55,13 +55,6 @@ template< typename blueprint > struct indivi_flat_wmap
   {
     table.erase( key );
   }
-  
-  static void eraseN( table_type &table, std::size_t n )
-  {
-    auto it = table.begin();
-    for (std::size_t i = 0u; i < n; ++i)
-      table.erase(it++);
-  }
 
   static table_type::iterator begin_itr( table_type &table )
   {
