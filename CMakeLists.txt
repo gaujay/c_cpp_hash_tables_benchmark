@@ -14,6 +14,11 @@ else()
 endif()
 
 add_executable(htables_bench
-               main.cpp)
+  main.cpp
+)
 
-target_include_directories(htables_bench PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(htables_bench
+  PUBLIC
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/third_party
+)

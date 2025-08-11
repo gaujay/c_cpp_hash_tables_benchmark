@@ -82,4 +82,5 @@
 #define SHIM_13 stc_hmap
 #define SHIM_14 uthash
 #define SHIM_15 verstable
-// #define SHIM_15
+// #define SHIM_16 indivi_flat_umap
+// #define SHIM_17 indivi_flat_wmap
